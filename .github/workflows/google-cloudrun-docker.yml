@@ -1,41 +1,39 @@
-name: Build and Deploy to Cloud Run
+name: Docker
 
 on:
   push:
-    branches: [ "master" ]
-
-env:
-  PROJECT_ID: janck112 # TODO: update Google Cloud project id
-  GAR_LOCATION: asia-southeast2 # TODO: update Artifact Registry location
-  SERVICE: tescicd # TODO: update Cloud Run service name
-  REGION: asia-southeast2 # TODO: update Cloud Run service region
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v2
 
-      - name: Set up Google Cloud SDK
-        uses: google-github-actions/setup-gcloud@v0
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_CREDENTIALS }}
-          export_default_credentials: true
+    deploy:
 
-      - name: Configure Docker to use Artifact Registry
-        run: gcloud auth configure-docker ${GAR_LOCATION}-docker.pkg.dev
+        name: Setup Gcloud Account
+        runs-on: ubuntu-latest
+        env:
+          IMAGE_NAME: gcr.io/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.GCP_APP_NAME }}
+        steps:
 
-      - name: Build and Push Container
-        run: |
-          docker build -t ${GAR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}:${{ github.sha }} ./
-          docker push ${GAR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}:${{ github.sha }}
+        - name: Login
+          uses: google-github-actions/setup-gcloud@v0
+          with:
+            project_id: ${{ secrets.GCP_PROJECT_ID }}
+            service_account_email: ${{ secrets.GCP_EMAIL }}
+            service_account_key: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Deploy to Cloud Run
-        run: |
-          gcloud run deploy ${SERVICE} \
-            --image=${GAR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${SERVICE}:${{ github.sha }} \
-            --region=${REGION} \
-            --platform=managed \
-            --allow-unauthenticated
+        - name: Configure Docker
+          run: gcloud auth configure-docker --quiet
+
+        - name: Checkout repository
+          uses: actions/checkout@v2
+
+        - name: Build Docker image
+          run: docker build . -t $IMAGE_NAME
+
+        - name: Push Docker image
+          run: docker push $IMAGE_NAME
+
+        - name: Deploy Docker image
+          run: gcloud run deploy ${{ secrets.GCP_PROJECT_ID }} --image $IMAGE_NAME --region us-central1 --platform managed --allow-unauthenticated
