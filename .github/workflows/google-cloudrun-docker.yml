@@ -1,4 +1,7 @@
 name: Docker
+env:
+    TEST: ${{ secrets.TEST }}
+ 
 
 on:
   push:
